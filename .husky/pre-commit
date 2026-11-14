@@ -1,0 +1,51 @@
+
+#!/bin/sh
+
+set -e
+
+echo "Checking staged PHP files..."
+
+NEW_FILES=$(git diff --cached --name-only --diff-filter=A -- '*.php')
+
+if [ -z "$NEW_FILES" ]; then
+    echo "No new PHP files found. Skipping validations."
+    exit 0
+fi
+
+echo "New PHP files found:"
+echo "$NEW_FILES"
+
+VALIDATION_FAILED=0
+
+echo "Running Laravel Pint..."
+
+for FILE in $NEW_FILES; do
+    if ! vendor/bin/pint --test "$FILE"; then
+        echo "Pint failed for: $FILE"
+        VALIDATION_FAILED=1
+    fi
+done
+
+echo "Running Larastan..."
+
+for FILE in $NEW_FILES; do
+    if ! vendor/bin/phpstan analyse "$FILE" --no-progress; then
+        echo "Larastan failed for: $FILE"
+        VALIDATION_FAILED=1
+    fi
+done
+
+echo "Running Pest..."
+
+if ! php artisan test --parallel; then
+    echo "Pest tests failed."
+    VALIDATION_FAILED=1
+fi
+
+if [ "$VALIDATION_FAILED" -ne 0 ]; then
+    echo "Some validations failed. Commit aborted."
+    exit 1
+fi
+
+echo "All validations passed successfully."
+exit 0
